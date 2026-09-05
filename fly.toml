@@ -1,0 +1,24 @@
+# Fly.io config for a background worker (no public HTTP endpoint needed).
+# App name must be globally unique on Fly -- change it before first deploy.
+app = "lzt-sniper-CHANGE-ME"
+primary_region = "iad"  # pick the region closest to you, e.g. "cdg", "lhr", "sin"
+
+[build]
+
+[env]
+  DATA_DIR = "/data"
+
+# Persistent disk so seen_accounts.json and saved images survive restarts
+# and redeploys. Create it once with:
+#   fly volumes create lzt_data --size 1 --region iad
+[[mounts]]
+  source      = "lzt_data"
+  destination = "/data"
+
+[[vm]]
+  size   = "shared-cpu-2x"  # headless Chrome is memory-hungry; give it room
+  memory = "2gb"
+
+# No [[services]] block -- this app doesn't listen on a port, it just runs
+# the scrape loop continuously. Fly will keep the machine running without
+# needing an HTTP service to health-check.

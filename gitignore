@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+seen_accounts.json
+account_images/
+venv/
