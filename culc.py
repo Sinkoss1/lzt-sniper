@@ -57,7 +57,7 @@ if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
 # Only origins in this list are allowed through. Anything scraped with an
 # origin NOT in this set (phishing / stealer / brute / social-engineering /
 # unknown) is discarded before an alert is ever sent.
-ALLOWED_ORIGINS = {"original", "self-registered"}
+ALLOWED_ORIGINS = {"original", "self-registered", "N/A", "n/a"}
 
 FILTERS = [
     "https://lzt.market/riot?pmax=11&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=price_to_up",
