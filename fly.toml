@@ -1,6 +1,6 @@
 # Fly.io config for a background worker (no public HTTP endpoint needed).
 # App name must be globally unique on Fly -- change it before first deploy.
-app = "lzt-sniper-CHANGE-ME"
+app = "lzt-sniper"
 primary_region = "iad"  # pick the region closest to you, e.g. "cdg", "lhr", "sin"
 
 [build]
