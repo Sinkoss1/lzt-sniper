@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: SecretEnviroment   # must match the environment name exactly (case-sensitive)
     concurrency: deploy-group   # avoid two deploys racing if you push twice quickly
     steps:
       - uses: actions/checkout@v4
