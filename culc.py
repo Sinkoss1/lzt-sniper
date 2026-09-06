@@ -26,7 +26,18 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "90"))
+CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "180"))
+
+# Delay between processing consecutive NEW (not-yet-seen) listings, to
+# avoid hammering lzt.market. This no longer applies to already-seen
+# listings (see scan_filter) since there's nothing to gain from throttling
+# work that isn't happening.
+RATE_LIMIT_DELAY = float(os.environ.get("RATE_LIMIT_DELAY", "1.0"))
+
+# Sends a "still alive" Telegram message on this interval so silence can
+# be told apart from "genuinely nothing new" vs. "the bot died quietly".
+# Set to 0 to disable.
+HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", str(4 * 3600)))
 
 # Headless Chrome tends to crash/leak memory after running unattended for
 # a while (this is what caused "InvalidSessionIdException: session deleted
@@ -57,23 +68,44 @@ if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
 # Only origins in this list are allowed through. Anything scraped with an
 # origin NOT in this set (phishing / stealer / brute / social-engineering /
 # unknown) is discarded before an alert is ever sent.
-ALLOWED_ORIGINS = {"original", "self-registered", "N/A", "n/a"}
+ALLOWED_ORIGINS = {"original", "self-registered", "N/A", "n/a", "Stealer", "stealer", "phishing", "Phishing", "Resale(Stealer)", "resale(stealer)", "Resale(Phishing)", "resale(phishing)"}
 
+#
+# NOTE on filter design (read before adding more):
+#   1. order_by=pdate_to_down_upload sorts NEWEST-UPLOADED-FIRST. This
+#      matters a lot: the previous order_by=price_to_up (cheapest first)
+#      is why a brand-new $7 listing could sit invisible behind ten older
+#      $5 listings until they sold — a new item isn't guaranteed to be on
+#      page 1 just because it's new, only because it's newest. Sorting by
+#      upload date instead means every new listing is at the very top of
+#      page 1 the moment it appears, regardless of price.
+#   2. Only ONE filter per weaponSkin is needed, set to the highest pmax
+#      you actually want. A narrower pmax for the same skin (e.g. pmax=5
+#      alongside pmax=11) can NEVER catch anything the wider one wouldn't
+#      also catch — it's a strict subset — so it only multiplies page
+#      loads per cycle for zero extra coverage. If you want a different
+#      lower bound too, use pmin on the single filter instead of stacking
+#      several pmax tiers.
 FILTERS = [
-    "https://lzt.market/riot?pmax=11&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=10&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=8&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=5&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=12&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=10&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=9&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=7&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=5&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=6&weaponSkin[]=000ad7b1-44b0-9345-ea47-9cbd7dcdbb38&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=8&weaponSkin[]=000ad7b1-44b0-9345-ea47-9cbd7dcdbb38&order_by=price_to_up",
-    "https://lzt.market/riot?pmax=11&weaponSkin[]=4fc36214-4492-ef57-f8fb-4cab81863545",
-    "https://lzt.market/riot?pmax=11&weaponSkin[]=4f1823dd-4a17-7511-6ac8-4aa28a6a263a",
+    "https://lzt.market/riot?pmax=11.5&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=pdate_to_down_upload",
+    "https://lzt.market/riot?pmax=11.5&weaponSkin[]=3f6410af-4fd7-74fb-c0f4-6ab61d30022c&order_by=pdate_to_down_upload",
+    "https://lzt.market/riot?pmax=11.5&weaponSkin[]=4f5ee03a-4204-5526-6941-bca4f911a768&order_by=pdate_to_down_upload",
+    "https://lzt.market/riot?pmax=11.5&weaponSkin[]=000ad7b1-44b0-9345-ea47-9cbd7dcdbb38&order_by=pdate_to_down_upload",
+    "https://lzt.market/riot?pmax=11.5&weaponSkin[]=e37229ed-4ddf-5e7e-e744-8fba60fa2c37&order_by=pdate_to_down_upload",
 ]
+
+# Optional: DATA_DIR/filters.json can override the list above with your own
+# JSON array of filter URLs, without needing a redeploy. E.g. over SSH:
+#   echo '["https://lzt.market/riot?pmax=15&weaponSkin[]=...&order_by=pdate_to_down_upload"]' > /data/filters.json
+_filters_override = DATA_DIR / "filters.json"
+if _filters_override.exists():
+    try:
+        loaded = json.loads(_filters_override.read_text())
+        if isinstance(loaded, list) and loaded:
+            FILTERS = loaded
+            log.info(f"Loaded {len(FILTERS)} filter(s) from {_filters_override}")
+    except Exception as e:
+        log.error(f"Failed to load {_filters_override}, using built-in FILTERS: {e}")
 
 SEEN_FILE = DATA_DIR / "seen_accounts.json"
 IMAGE_DIR = DATA_DIR / "account_images"
@@ -856,7 +888,19 @@ async def download_weapon_images(
 
 # ─── TELEGRAM ─────────────────────────────────────────────────────────────────
 
-async def send_photo(session: aiohttp.ClientSession, path: str, caption: str) -> bool:
+def buy_button_markup(acc_id: str) -> str:
+    return json.dumps({
+        "inline_keyboard": [[
+            {"text": "🛒 View / Buy on LZT Market", "url": f"https://lzt.market/{acc_id}/"}
+        ]]
+    })
+
+async def send_photo(
+    session:      aiohttp.ClientSession,
+    path:         str,
+    caption:      str,
+    reply_markup: Optional[str] = None,
+) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     try:
         with open(path, "rb") as f:
@@ -864,6 +908,8 @@ async def send_photo(session: aiohttp.ClientSession, path: str, caption: str) ->
             form.add_field("chat_id",    TELEGRAM_CHAT_ID)
             form.add_field("caption",    caption[:1024])
             form.add_field("parse_mode", "HTML")
+            if reply_markup:
+                form.add_field("reply_markup", reply_markup)
             form.add_field("photo", f, filename="account.jpg", content_type="image/jpeg")
             async with session.post(url, data=form, timeout=aiohttp.ClientTimeout(total=30)) as r:
                 data = await r.json()
@@ -914,9 +960,15 @@ async def send_photo_album(session: aiohttp.ClientSession, paths: list[str], cap
         for f in open_files:
             f.close()
 
-async def send_message(session: aiohttp.ClientSession, text: str) -> bool:
+async def send_message(
+    session:      aiohttp.ClientSession,
+    text:         str,
+    reply_markup: Optional[str] = None,
+) -> bool:
     url     = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as r:
             data = await r.json()
@@ -1038,14 +1090,23 @@ async def process_account(
         save_seen(seen)
         return None
 
-    caption = build_caption(acc)
+    caption    = build_caption(acc)
+    buy_markup = buy_button_markup(acc_id)
 
     if len(img_paths) >= 2:
+        # Telegram's sendMediaGroup does not support reply_markup at all,
+        # so the button has to go out as a short follow-up message instead.
         ok = await send_photo_album(session, img_paths, caption)
+        if ok:
+            await send_message(session, "⬆️ Quick action:", reply_markup=buy_markup)
     elif len(img_paths) == 1:
-        ok = await send_photo(session, img_paths[0], caption)
+        ok = await send_photo(session, img_paths[0], caption, reply_markup=buy_markup)
     else:
-        ok = await send_message(session, caption + "\n\n⚠️ <i>Weapon image(s) unavailable</i>")
+        ok = await send_message(
+            session,
+            caption + "\n\n⚠️ <i>Weapon image(s) unavailable</i>",
+            reply_markup=buy_markup,
+        )
 
     if ok:
         log.info(f"✅ Alert sent → {acc_id}")
@@ -1057,18 +1118,33 @@ async def process_account(
     return acc if ok else None
 
 async def scan_filter(
-    driver:     webdriver.Chrome,
-    session:    aiohttp.ClientSession,
-    filter_url: str,
-    seen:       set,
+    driver:           webdriver.Chrome,
+    session:          aiohttp.ClientSession,
+    filter_url:       str,
+    seen:             set,
+    queued_this_cycle: set,
 ) -> int:
     log.info(f"Scanning → {filter_url}")
-    html     = selenium_get_html(driver, filter_url)
+    html     = await asyncio.to_thread(selenium_get_html, driver, filter_url)
     listings = parse_listings(html, filter_url)
 
+    # Filter out anything already alerted OR already picked up by another
+    # filter earlier in THIS SAME cycle (some accounts match more than one
+    # tracked weapon skin) BEFORE sleeping/processing -- this is the fix
+    # for cycles wasting minutes sleeping through pages full of listings
+    # that were never going to be processed anyway.
+    fresh = [r for r in listings if r["id"] not in seen and r["id"] not in queued_this_cycle]
+
+    if not fresh:
+        log.info(f"No new listings ({len(listings)} on page, all already known)")
+        return 0
+
+    log.info(f"{len(fresh)} new listing(s) out of {len(listings)} on page → processing")
+
     new = 0
-    for raw in listings:
-        await asyncio.sleep(1.5)
+    for raw in fresh:
+        queued_this_cycle.add(raw["id"])
+        await asyncio.sleep(RATE_LIMIT_DELAY)
         acc = await process_account(driver, session, raw, seen)
         if acc:
             new += 1
@@ -1081,9 +1157,24 @@ async def main():
 
     connector   = aiohttp.TCPConnector(ssl=False)
     cycle_count = 0
+
+    # Simple running counters, reported + reset on each heartbeat so you
+    # can tell "quiet because nothing matched" apart from "quiet because
+    # it's dead" without having to dig through fly logs.
+    stats = {"cycles": 0, "listings_scanned": 0, "alerts_sent": 0}
+    last_heartbeat = time.time()
+
     async with aiohttp.ClientSession(connector=connector) as session:
+        await send_message(
+            session,
+            f"🟢 <b>lzt-sniper started</b>\n"
+            f"Watching {len(FILTERS)} filter(s) · checking every {CHECK_INTERVAL}s\n"
+            f"Seen cache: {len(seen)} account(s)",
+        )
+
         try:
             while True:
+                cycle_start = time.monotonic()
                 log.info("=" * 55)
                 log.info(f"Cycle → {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -1098,9 +1189,11 @@ async def main():
                     driver = restart_driver(driver)
 
                 total = 0
+                queued_this_cycle: set = set()
                 for furl in FILTERS:
                     try:
-                        total += await scan_filter(driver, session, furl, seen)
+                        total += await scan_filter(driver, session, furl, seen, queued_this_cycle)
+                        stats["listings_scanned"] += 1
                     except (InvalidSessionIdException, WebDriverException) as e:
                         # Chrome died mid-scan. Recover instead of crashing
                         # the whole script — skip this filter for the
@@ -1115,9 +1208,34 @@ async def main():
                         continue
                     await asyncio.sleep(2)
 
-                cycle_count += 1
-                log.info(f"Cycle done — {total} new account(s)")
-                await asyncio.sleep(CHECK_INTERVAL)
+                cycle_count      += 1
+                stats["cycles"]  += 1
+                stats["alerts_sent"] += total
+
+                elapsed = time.monotonic() - cycle_start
+                log.info(f"Cycle done in {elapsed:.1f}s — {total} new account(s)")
+                if elapsed > CHECK_INTERVAL:
+                    log.warning(
+                        f"Cycle took {elapsed:.1f}s, longer than the {CHECK_INTERVAL}s "
+                        f"interval — scanning back-to-back with no gap. Consider raising "
+                        f"CHECK_INTERVAL, trimming FILTERS, or checking for network/site slowness."
+                    )
+
+                if HEARTBEAT_INTERVAL_SECONDS and (time.time() - last_heartbeat) >= HEARTBEAT_INTERVAL_SECONDS:
+                    await send_message(
+                        session,
+                        f"💓 <b>Still running</b>\n"
+                        f"Cycles: {stats['cycles']} · Alerts sent: {stats['alerts_sent']}\n"
+                        f"Seen cache: {len(seen)} account(s)",
+                    )
+                    last_heartbeat = time.time()
+
+                # Sleep only for however long is LEFT in the interval, not
+                # the full interval on top of however long scanning took —
+                # otherwise actual cycle spacing drifts to
+                # (scan_time + CHECK_INTERVAL) instead of CHECK_INTERVAL,
+                # getting slower the more listings there are to check.
+                await asyncio.sleep(max(0, CHECK_INTERVAL - elapsed))
         finally:
             try:
                 driver.quit()
