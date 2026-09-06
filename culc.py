@@ -26,7 +26,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "180"))
+CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "90"))
 
 # Headless Chrome tends to crash/leak memory after running unattended for
 # a while (this is what caused "InvalidSessionIdException: session deleted
@@ -71,6 +71,8 @@ FILTERS = [
     "https://lzt.market/riot?pmax=5&weaponSkin[]=d8d5d7a1-4d81-8560-54bc-0692ab40f69b&order_by=price_to_up",
     "https://lzt.market/riot?pmax=6&weaponSkin[]=000ad7b1-44b0-9345-ea47-9cbd7dcdbb38&order_by=price_to_up",
     "https://lzt.market/riot?pmax=8&weaponSkin[]=000ad7b1-44b0-9345-ea47-9cbd7dcdbb38&order_by=price_to_up",
+    "https://lzt.market/riot?pmax=11&weaponSkin[]=4fc36214-4492-ef57-f8fb-4cab81863545",
+    "https://lzt.market/riot?pmax=11&weaponSkin[]=4f1823dd-4a17-7511-6ac8-4aa28a6a263a",
 ]
 
 SEEN_FILE = DATA_DIR / "seen_accounts.json"
