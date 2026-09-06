@@ -26,7 +26,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "900"))
+CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "180"))
 
 # Headless Chrome tends to crash/leak memory after running unattended for
 # a while (this is what caused "InvalidSessionIdException: session deleted
