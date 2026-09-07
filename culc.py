@@ -26,7 +26,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "180"))
+CHECK_INTERVAL     = int(os.environ.get("CHECK_INTERVAL", "120"))
 
 # Delay between processing consecutive NEW (not-yet-seen) listings, to
 # avoid hammering lzt.market. This no longer applies to already-seen
